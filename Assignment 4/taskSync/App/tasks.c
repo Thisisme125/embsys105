@@ -117,6 +117,7 @@ void StartupTask(void* pdata)
             qMsgMemPart = OSMemCreate(qMsgBlocks, QMAXENTRIES, sizeof(QMsg_t),&err);
 
 	// TODO EventFlags 01: add code here to create event flag 'group' rxFlags
+            rxFlags = OSFlagCreate(0x3, &err);
 
     // The maximum of tasks the application can have is defined by OS_MAX_TASKS in os_cfg.h
 	INT8U pri = APP_TASK_START_PRIO + 1;
@@ -162,11 +163,13 @@ void TaskMBTx(void* pdata)
     for (i = 0; i < TASKLOOPLIMIT; i++)
     {
     	// TODO Mailbox 02: add code here to send msgA[i] to TaskMBRxA using mailbox mboxA
+        OSMboxPost(mboxA, msgA[i]);
 
         OSTimeDly(90);
 
     	// TODO Mailbox 03: add code here to send msgB[i] to TaskMBRxB using mailbox mboxB
-
+        OSMboxPost(mboxB, msgB[i]);
+        
         OSTimeDly(90);
     }
     printWithBuf(buf, BUFSIZE, "TaskMBTx: Done! Sent %d messages\n", 2 * TASKLOOPLIMIT);
@@ -196,8 +199,11 @@ void TaskMBRxA(void* pdata)
     {
     	// TODO EventFlags 02: add code here to wait on bit 0 in rxFlags till TaskRxFlags clears it,
     	// indicating it is OK to receive the next message
+        OSFlagPend(rxFlags, 0x1, OS_FLAG_WAIT_CLR_ALL,0,&err);
 
     	// TODO Mailbox 04: add code here to receive a message in msgReceived from mailbox mboxA
+        msgReceived = OSMboxPend(mboxA,0,&err);
+        
 
     	TaskMBRxA_msgCount += 1;
     	expected[1] = '0' + (i % 10);
@@ -208,6 +214,7 @@ void TaskMBRxA(void* pdata)
 
     	// TODO EventFlags 03: add code here to set bit 0 in rxFlags, indicating to TaskRxFlags
     	// that we have finished receiving a message
+        OSFlagPost(rxFlags, 0x1, OS_FLAG_SET, &err);
 
     	printWithBuf(buf, BUFSIZE, "TaskMBRxA: actual=%s, expected=%s, received=%d errors=%d\n",
     			msgReceived, expected, TaskMBRxA_msgCount, errorCount);
@@ -243,8 +250,10 @@ void TaskMBRxB(void* pdata)
     {
     	// TODO EventFlags 04: add code here to wait on bit 1 in rxFlags till TaskRxFlags clears it,
     	// indicating it is OK to receive the next message
+        OSFlagPend(rxFlags, 0x2, OS_FLAG_WAIT_CLR_ALL, 0, &err);
 
     	// TODO Mailbox 05: add code here to receive a message in msgReceived from mboxB
+        msgReceived = OSMboxPend(mboxB, 0, &err);
 
     	TaskMBRxB_msgCount += 1;
     	expected[1] = '0' + (i % 10);
@@ -255,6 +264,7 @@ void TaskMBRxB(void* pdata)
 
     	// TODO EventFlags 05: add code here to set bit 1 in rxFlags, indicating to TaskRxFlags
     	// that we have finished receiving a message
+        OSFlagPost(rxFlags, 0x2, OS_FLAG_SET, &err);
 
     	printWithBuf(buf, BUFSIZE, "TaskMBRxB: actual=%s, expected=%s, received=%d errors=%d\n",
     			msgReceived, expected, TaskMBRxB_msgCount, errorCount);
@@ -276,7 +286,6 @@ void TaskQTxA(void* pdata)
 	INT8U err;
 	char buf[BUFSIZE];
 	QMsg_t *pQmsgToSend;
-
 	printWithBuf(buf, BUFSIZE, "TaskQTxA: starting\n");
 
 	char msg[TASKLOOPLIMIT][3] = {{0}};
@@ -291,24 +300,25 @@ void TaskQTxA(void* pdata)
 
     for (i = 0; i < TASKLOOPLIMIT; i++)
     {
-//		// allocate a queue entry
-//		pQmsgToSend = (QMsg_t*) OSMemGet(qMsgMemPart, &err);
-//		if (err != OS_ERR_NONE)
-//		{
-//			printWithBuf(buf, BUFSIZE, "Not enough message blocks");
-//			while (OS_TRUE);
-//		}
-//
-//		pQmsgToSend->msg = (char*)msg[i];
-//		err = OS_ERR_NONE;
-//		do
-//		{
-//			OSTimeDly(5);
-//
-//			// TODO Queue 03: first uncomment this code block (highlight and hit Ctrl-Shift-K)
-//    	    // then add code here to send pQmsgToSend to TaskQRx using qMsg
-//
-//		} while (err == OS_ERR_Q_FULL);
+		// allocate a queue entry
+		pQmsgToSend = (QMsg_t*) OSMemGet(qMsgMemPart, &err);
+		if (err != OS_ERR_NONE)
+		{
+			printWithBuf(buf, BUFSIZE, "Not enough message blocks");
+			while (OS_TRUE);
+		}
+
+		pQmsgToSend->msg = (char*)msg[i];
+		err = OS_ERR_NONE;
+		do
+		{
+			OSTimeDly(5);
+
+			// TODO Queue 03: first uncomment this code block (highlight and hit Ctrl-Shift-K)
+    	    // then add code here to send pQmsgToSend to TaskQRx using qMsg
+               err = OSQPost(qMsg, pQmsgToSend);
+
+		} while (err == OS_ERR_Q_FULL);
 
         printWithBuf(buf, BUFSIZE, "TaskQTxA: sent msg %s\n", msg[i]);
 
@@ -343,23 +353,24 @@ void TaskQTxB(void* pdata)
 
     for (i = 0; i < TASKLOOPLIMIT; i++)
     {
-//		// allocate a queue entry
-//		QMsg_t *pQmsgToSend = OSMemGet(qMsgMemPart, &err);
-//		if (err != OS_ERR_NONE)
-//		{
-//			printWithBuf(buf, BUFSIZE, "Not enough message blocks");
-//			while (OS_TRUE);
-//		}
-//
-//		pQmsgToSend->msg = (char*)msg[i];
-//		do
-//		{
-//			OSTimeDly(5);
-//
-//			// TODO Queue 04: first uncomment this code block (highlight and hit Ctrl-Shift-K)
-//    	    // then add code here to send pQmsgToSend to TaskQRx using qMsg
-//
-//		} while (err == OS_ERR_Q_FULL);
+		// allocate a queue entry
+		QMsg_t *pQmsgToSend = OSMemGet(qMsgMemPart, &err);
+		if (err != OS_ERR_NONE)
+		{
+			printWithBuf(buf, BUFSIZE, "Not enough message blocks");
+			while (OS_TRUE);
+		}
+
+		pQmsgToSend->msg = (char*)msg[i];
+		do
+		{
+			OSTimeDly(5);
+
+			// TODO Queue 04: first uncomment this code block (highlight and hit Ctrl-Shift-K)
+    	    // then add code here to send pQmsgToSend to TaskQRx using qMsg
+                       err = OSQPost(qMsg, pQmsgToSend);
+
+		} while (err == OS_ERR_Q_FULL);
 
 		printWithBuf(buf, BUFSIZE, "TaskQTxB: sent msg %s\n", msg[i]);
 
@@ -400,13 +411,14 @@ void TaskQRx(void* pdata)
 	// Receive messages from 2 tasks hence cycle TASKLOOPLIMIT twice
     for (i = 0; i < TASKLOOPLIMIT * 2; i++)
     {
-//    	// TODO Queue 05: first uncomment this code block (highlight and hit Ctrl-Shift-K)
-//    	// then add code here to receive a message in pQMsgReceived from qMsg
-//
-//    	memcpy(msgReceived, pQMsgReceived->msg, 3);
-//
-//		// free the queue msg so it can be reused
-//		OSMemPut(qMsgMemPart, pQMsgReceived);
+    	// TODO Queue 05: first uncomment this code block (highlight and hit Ctrl-Shift-K)
+    	// then add code here to receive a message in pQMsgReceived from qMsg
+        pQMsgReceived = OSQPend(qMsg, 0, &err);
+
+    	memcpy(msgReceived, pQMsgReceived->msg, 3);
+
+		// free the queue msg so it can be reused
+		OSMemPut(qMsgMemPart, pQMsgReceived);
 
 		printWithBuf(buf, BUFSIZE, "TaskQRx: received msg %s\n", msgReceived);
 
@@ -472,6 +484,7 @@ void TaskRxFlags(void* pdata)
     {
     	// TODO EventFlags 06: add code here to wait for both TaskMBRxA and TaskMBRxB to signal that they have
     	// received a message
+        OSFlagPend(rxFlags, 0x3, OS_FLAG_WAIT_CLR_ALL, 0, &err);
 
     	isError = (i != TaskMBRxA_msgCount) || (i != TaskMBRxB_msgCount);
     	if (isError && !iError)
@@ -485,6 +498,7 @@ void TaskRxFlags(void* pdata)
 
     	// TODO EventFlags 07: add code here to signal to both TaskMBRxA and TaskMBRxB that they can
     	// go ahead and receive their next message.
+        OSFlagPend(rxFlags, 0x3, OS_FLAG_WAIT_SET_ALL, 0, &err);
 
     	OSTimeDly(10);
     }
@@ -516,9 +530,10 @@ void printWithBuf(char *buf, int size, char *format, ...)
     vsnprintf(buf, size, format, args);
 
     // TODO semPrint 02: place the call to PrintString in a critical section using semaphore semPrint
-
+    OSSemPend(semPrint, 0, &err);
     PrintString(buf);
-
+    OSSemPost(semPrint);
+    
     va_end(args);
 }
 
